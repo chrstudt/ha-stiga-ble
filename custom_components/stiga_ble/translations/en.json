@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Stiga Mower Setup",
+        "description": "Enter the MAC address of your Stiga G1200.",
+        "data": {
+          "mac": "MAC Address (e.g., 34:AB:95:47:B2:E6)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  }
+}

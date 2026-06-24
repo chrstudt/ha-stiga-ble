@@ -1,0 +1,17 @@
+{
+  "domain": "stiga_ble",
+  "name": "Stiga G1200 BLE",
+  "documentation": "https://github.com/chrstudt/ha-stiga-ble",
+  "dependencies": [
+    "bluetooth"
+  ],
+  "requirements": [
+    "bleak>=0.21.1"
+  ],
+  "codeowners": [
+    "@chrstudt"
+  ],
+  "iot_class": "local_push",
+  "version": "0.1.0",
+  "config_flow": true
+}

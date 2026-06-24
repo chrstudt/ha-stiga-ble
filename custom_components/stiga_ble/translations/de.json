@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Stiga Mähroboter Einrichtung",
+        "description": "Bitte gib die MAC-Adresse deines Stiga G1200 ein.",
+        "data": {
+          "mac": "MAC-Adresse (z.B. 34:AB:95:47:B2:E6)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "abort": {
+      "already_configured": "Das Gerät ist bereits konfiguriert"
+    }
+  }
+}
