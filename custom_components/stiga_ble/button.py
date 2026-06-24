@@ -66,9 +66,17 @@ class StigaStartButton(ButtonEntity):
             )
             return
 
+        from bleak_retry_connector import establish_connection
+        
         try:
-            async with BleakClient(ble_device) as client:
-                LOGGER.debug("Connected to %s, sending START command.", self._mac)
+            client = await establish_connection(
+                client_class=BleakClient,
+                device=ble_device,
+                name=mac_upper,
+            )
+            
+            try:
+                LOGGER.debug("Connected to %s, sending START command.", mac_upper)
                 
                 await client.write_gatt_char(
                     STIGA_CHARACTERISTIC_UUID, 
@@ -77,9 +85,11 @@ class StigaStartButton(ButtonEntity):
                 )
                 
                 LOGGER.info("START command sent successfully to Stiga Mower.")
+            finally:
+                await client.disconnect()
                 
         except BleakError as err:
-            LOGGER.error("Bleak error connecting to %s: %s", self._mac, err)
+            LOGGER.error("Bleak error connecting to %s: %s", mac_upper, err)
         except asyncio.TimeoutError:
             LOGGER.error("Timeout connecting to %s", self._mac)
         except Exception as err:
