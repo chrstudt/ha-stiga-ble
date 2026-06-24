@@ -49,14 +49,20 @@ class StigaStartButton(ButtonEntity):
         """Handle the button press."""
         LOGGER.info("Attempting to start Stiga Mower at %s", self._mac)
         
+        mac_upper = self._mac.upper()
         # Resolve best path to the mower via Bluetooth Proxys
-        ble_device = async_ble_device_from_address(self.hass, self._mac, connectable=True)
+        ble_device = async_ble_device_from_address(self.hass, mac_upper, connectable=True)
         
+        if not ble_device:
+            # Fallback: Sometimes devices advertise as non-connectable but can still be connected to,
+            # or HA cached them without the connectable flag.
+            ble_device = async_ble_device_from_address(self.hass, mac_upper, connectable=False)
+            
         if not ble_device:
             LOGGER.error(
                 "Could not find BLE device with MAC %s. "
-                "Make sure it is in range of an active Shelly Bluetooth proxy.",
-                self._mac
+                "Make sure it is in range of an active Shelly Bluetooth proxy and is currently advertising (z.B. nicht im Tiefschlaf).",
+                mac_upper
             )
             return
 
