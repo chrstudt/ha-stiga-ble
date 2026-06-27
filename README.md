@@ -3,9 +3,9 @@
 Diese Custom Component integriert den Stiga G1200 Mähroboter in Home Assistant über Bluetooth Low Energy (BLE). Die Kommunikation wird direkt über die internen Home Assistant Bluetooth-Manager geroutet, was bedeutet, dass **Active Bluetooth Proxys (z.B. Shelly)** nahtlos unterstützt werden.
 
 ## Features
-- Lokale Push-Steuerung (ohne Cloud).
-- Unterstützt Shelly Bluetooth Proxys und andere ESPHome Proxys.
-- Start-Button Entität, um den Mähroboter asynchron zu starten.
+- Lokale Überwachung (ohne Cloud).
+- Unterstützt Shelly Bluetooth Proxys und andere ESPHome Proxys im Active/Passive Scanning Modus.
+- Liest Batteriestatus und Mäherstatus (Mowing, Charging, Error etc.) direkt aus den Bluetooth-Advertisements.
 
 ## Installation via HACS
 
@@ -33,15 +33,12 @@ Nach der Installation kannst du die Integration bequem über die Home Assistant 
 4. Gib im folgenden Dialog die **MAC-Adresse** deines Mähroboters ein (z.B. `34:AB:95:47:B2:E6`).
 5. Klicke auf **Senden**.
 
-Home Assistant wird die Integration laden und dir eine Start-Button-Entität zur Verfügung stellen.
+Home Assistant wird die Integration laden und dir eine Batterie- sowie Status-Entität zur Verfügung stellen.
 
 ## Fehlerbehebung
-- **Keine Verbindung / Timeout:** Stelle sicher, dass sich der Mähroboter in der Nähe deines Home Assistant Hosts oder eines **aktiven** Bluetooth-Proxys befindet.
+- **Keine Sensordaten:** Stelle sicher, dass sich der Mähroboter in der Nähe deines Home Assistant Hosts oder eines **aktiven** Bluetooth-Proxys befindet. Shelly Proxys müssen so konfiguriert sein, dass sie BLE Advertisements weiterleiten (Active oder Passive Scanning).
 - **Entity wird nicht erstellt:** Prüfe die Home Assistant Logs (unter Einstellungen -> System -> Logs) auf Fehler der Integration `stiga_ble`.
 
 ## Zukünftige Features (Roadmap)
-- Hinzufügen von Befehlen für "Stop" und "Home" (Rückkehr zur Ladestation).
-- **Sensoren:** Auslesen des Batteriestatus (Ladezustand in %) und der aktuellen Mäh-Aktivität (Mäht, Lädt, Fehler).
 - **Diagnose:** Hinzufügen einer Entität für die BLE-Signalstärke (RSSI) zur Überprüfung der Verbindung zwischen Proxy und Mäher.
-- **Benachrichtigungen (Subskriptionen):** Reagieren auf spontane Statusänderungen des Mähers, um Home Assistant direkt zu aktualisieren (Push statt Polling).
-- **Zeitpläne & Zonen:** (Falls per BLE unterstützt) Steuerung von speziellen Startpunkten und Mähzeiten direkt über Home Assistant.
+- **Benachrichtigungen (Subskriptionen):** Falls möglich, noch schnellere Reaktionen auf spontane Statusänderungen.

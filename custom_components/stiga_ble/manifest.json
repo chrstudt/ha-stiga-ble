@@ -5,10 +5,6 @@
   "dependencies": [
     "bluetooth"
   ],
-  "requirements": [
-    "bleak>=0.21.1",
-    "bleak-retry-connector>=3.0.0"
-  ],
   "codeowners": [
     "@chrstudt"
   ],
