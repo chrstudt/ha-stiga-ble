@@ -30,6 +30,7 @@ async def async_setup_entry(
         StigaSpeedSensor(coordinator),
         StigaModeSensor(coordinator),
         StigaErrorSensor(coordinator),
+        StigaRawSensor(coordinator),
     ])
 
 class StigaMowerSensor(CoordinatorEntity, SensorEntity):
@@ -122,3 +123,17 @@ class StigaErrorSensor(StigaMowerSensor):
     @property
     def native_value(self) -> str | None:
         return self.coordinator.data.get("error")
+
+class StigaRawSensor(StigaMowerSensor):
+    """Representation of the Stiga raw debug sensor."""
+    _attr_icon = "mdi:bluetooth"
+
+    def __init__(self, coordinator: StigaBLECoordinator) -> None:
+        super().__init__(coordinator)
+        mac_clean = self._mac.replace(":", "").lower()
+        self._attr_unique_id = f"stiga_raw_{mac_clean}"
+        self._attr_name = "Raw BLE Data"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.data.get("raw_rx")

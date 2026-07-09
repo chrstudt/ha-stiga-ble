@@ -40,6 +40,7 @@ class StigaBLECoordinator(DataUpdateCoordinator):
             "speed": None,
             "mode": None,
             "error": None,
+            "raw_rx": None,
         }
 
     async def _async_update_data(self):
@@ -79,6 +80,8 @@ class StigaBLECoordinator(DataUpdateCoordinator):
 
     def _notification_handler(self, sender, data: bytearray) -> None:
         """Handle incoming BLE notifications."""
+        self.data["raw_rx"] = data.hex(" ").upper()
+
         if len(data) >= 3 and data[0] == 0x02:
             self.data["battery"] = data[1]
             states = {0: "Idle", 1: "Mowing", 2: "Charging", 3: "Paused", 4: "Error"}
