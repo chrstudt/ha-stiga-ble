@@ -3,6 +3,7 @@ import asyncio
 from datetime import timedelta
 from bleak import BleakClient
 from bleak.exc import BleakError
+from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.components.bluetooth import async_ble_device_from_address
@@ -51,7 +52,12 @@ class StigaBLECoordinator(DataUpdateCoordinator):
 
             try:
                 self.connected = True
-                async with BleakClient(ble_device) as client:
+                client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    ble_device,
+                    self.mac,
+                )
+                try:
                     for uuid in NOTIFY_CHAR_UUIDS:
                         try:
                             await client.start_notify(uuid, self._notification_handler)
@@ -61,6 +67,8 @@ class StigaBLECoordinator(DataUpdateCoordinator):
                     LOGGER.info("Connected to %s, waiting for notifications...", self.mac)
                     await asyncio.sleep(WAIT_FOR_NOTIFICATIONS_SEC)
                     LOGGER.info("Finished collecting data from %s, disconnecting.", self.mac)
+                finally:
+                    await client.disconnect()
             except Exception as e:
                 self.connected = False
                 raise UpdateFailed(f"Error communicating with {self.mac}: {e}")
@@ -110,9 +118,16 @@ class StigaBLECoordinator(DataUpdateCoordinator):
                 
             try:
                 self.connected = True
-                async with BleakClient(ble_device) as client:
+                client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    ble_device,
+                    self.mac,
+                )
+                try:
                     await client.write_gatt_char(WRITE_CHAR_UUID, command, response=False)
                     LOGGER.info("Command sent successfully to %s", self.mac)
+                finally:
+                    await client.disconnect()
             except Exception as e:
                 LOGGER.error("Error sending command to %s: %s", self.mac, e)
             finally:
