@@ -17,7 +17,7 @@ from .const import (
 )
 
 POLL_INTERVAL = timedelta(minutes=5)
-WAIT_FOR_NOTIFICATIONS_SEC = 4.0
+WAIT_FOR_NOTIFICATIONS_SEC = 20.0
 
 class StigaBLECoordinator(DataUpdateCoordinator):
     """Class to manage BLE connection and data for Stiga mower."""
