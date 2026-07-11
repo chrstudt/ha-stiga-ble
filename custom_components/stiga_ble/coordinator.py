@@ -17,7 +17,7 @@ from .const import (
 )
 
 POLL_INTERVAL = timedelta(minutes=5)
-WAIT_FOR_NOTIFICATIONS_SEC = 20.0
+WAIT_FOR_NOTIFICATIONS_SEC = 5.0
 
 class StigaBLECoordinator(DataUpdateCoordinator):
     """Class to manage BLE connection and data for Stiga mower."""
@@ -33,6 +33,7 @@ class StigaBLECoordinator(DataUpdateCoordinator):
         self.mac = mac
         self._ble_lock = asyncio.Lock()
         self.connected = False
+        self.client = None
         
         self.data = {
             "battery": None,
@@ -43,11 +44,34 @@ class StigaBLECoordinator(DataUpdateCoordinator):
             "raw_rx": None,
         }
 
+    def _get_ble_device(self):
+        """Get the best BLE device, explicitly avoiding Shelly proxies if possible."""
+        ble_device = None
+        try:
+            from homeassistant.components.bluetooth import async_scanner_devices_by_address
+            devices = async_scanner_devices_by_address(self.hass, self.mac, connectable=True)
+            for d in devices:
+                scanner = getattr(d, "scanner", None)
+                source = getattr(scanner, "source", "") if scanner else ""
+                name = getattr(scanner, "name", "") if scanner else ""
+                # Ignore Shelly proxies as they often fail to maintain the connection
+                if "shelly" not in str(source).lower() and "shelly" not in str(name).lower():
+                    ble_device = getattr(d, "ble_device", d)
+                    break
+        except Exception as e:
+            LOGGER.debug("Could not filter scanners: %s", e)
+        
+        if not ble_device:
+            # Fallback to the default HA behavior
+            ble_device = async_ble_device_from_address(self.hass, self.mac, connectable=True)
+            
+        return ble_device
+
     async def _async_update_data(self):
         """Fetch data from device."""
         LOGGER.debug("Starting periodic data fetch for %s", self.mac)
         async with self._ble_lock:
-            ble_device = async_ble_device_from_address(self.hass, self.mac, connectable=True)
+            ble_device = self._get_ble_device()
             if not ble_device:
                 raise UpdateFailed(f"Could not find BLE device for {self.mac}")
 
@@ -59,11 +83,16 @@ class StigaBLECoordinator(DataUpdateCoordinator):
                     self.mac,
                 )
                 try:
-                    for uuid in NOTIFY_CHAR_UUIDS:
-                        try:
-                            await client.start_notify(uuid, self._notification_handler)
-                        except Exception as e:
-                            LOGGER.debug("Could not subscribe to %s: %s", uuid, e)
+                    # Dynamically subscribe to all notify characteristics
+                    # like the TUI tool does, to ensure we don't miss state updates
+                    # sent on new or unlisted characteristics.
+                    for service in client.services:
+                        for char in service.characteristics:
+                            if "notify" in char.properties:
+                                try:
+                                    await client.start_notify(char.uuid, self._notification_handler)
+                                except Exception as e:
+                                    LOGGER.debug("Could not subscribe to %s: %s", char.uuid, e)
                     
                     LOGGER.info("Connected to %s, waiting for notifications...", self.mac)
                     await asyncio.sleep(WAIT_FOR_NOTIFICATIONS_SEC)
@@ -110,31 +139,40 @@ class StigaBLECoordinator(DataUpdateCoordinator):
             else:
                 self.data["error"] = errors.get(data[1], f"Unknown Error ({data[1]})")
 
+        # Push the updated data instantly to the Home Assistant sensors
+        self.async_set_updated_data(self.data)
+
     async def send_command(self, command: bytearray) -> None:
         """Send a command to the mower."""
         LOGGER.debug("Attempting to send command to %s", self.mac)
         async with self._ble_lock:
-            ble_device = async_ble_device_from_address(self.hass, self.mac, connectable=True)
-            if not ble_device:
-                LOGGER.error("Could not find BLE device for %s", self.mac)
-                return
-                
-            try:
-                self.connected = True
-                client = await establish_connection(
-                    BleakClientWithServiceCache,
-                    ble_device,
-                    self.mac,
-                )
+            client = self.client
+            disconnect_after = False
+
+            if not client or not client.is_connected:
+                ble_device = self._get_ble_device()
+                if not ble_device:
+                    LOGGER.error("Could not find BLE device for %s", self.mac)
+                    return
                 try:
-                    await client.write_gatt_char(WRITE_CHAR_UUID, command, response=False)
-                    LOGGER.info("Command sent successfully to %s", self.mac)
-                finally:
-                    await client.disconnect()
+                    client = await establish_connection(
+                        BleakClientWithServiceCache,
+                        ble_device,
+                        self.mac,
+                    )
+                    disconnect_after = True
+                except Exception as e:
+                    LOGGER.error("Error connecting to send command to %s: %s", self.mac, e)
+                    return
+
+            try:
+                await client.write_gatt_char(WRITE_CHAR_UUID, command, response=False)
+                LOGGER.info("Command sent successfully to %s", self.mac)
             except Exception as e:
                 LOGGER.error("Error sending command to %s: %s", self.mac, e)
             finally:
-                self.connected = False
+                if disconnect_after and client:
+                    await client.disconnect()
         
         # After sending a command, wait a bit and trigger an update to refresh state
         self.hass.async_create_task(self._delayed_refresh())
