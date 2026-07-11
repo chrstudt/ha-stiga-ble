@@ -139,6 +139,8 @@ class StigaBLECoordinator(DataUpdateCoordinator):
             else:
                 self.data["error"] = errors.get(data[1], f"Unknown Error ({data[1]})")
 
+        LOGGER.info("Stiga received notification: %s -> Parsed status: %s", data.hex(' ').upper(), self.data.get('status'))
+
         # Push the updated data instantly to the Home Assistant sensors
         self.async_set_updated_data(self.data)
 

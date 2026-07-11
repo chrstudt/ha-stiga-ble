@@ -29,6 +29,7 @@ async def async_setup_entry(
         StigaCommandButton(coordinator, "Start", CMD_START, "mdi:play"),
         StigaCommandButton(coordinator, "Stop", CMD_STOP, "mdi:stop"),
         StigaCommandButton(coordinator, "Home", CMD_HOME, "mdi:home"),
+        StigaRefreshButton(coordinator, "Refresh Status", "mdi:refresh"),
     ])
 
 class StigaCommandButton(ButtonEntity):
@@ -61,3 +62,32 @@ class StigaCommandButton(ButtonEntity):
         """Handle the button press."""
         LOGGER.debug("Pressing %s button", self._attr_name)
         await self.coordinator.send_command(self._command)
+
+class StigaRefreshButton(ButtonEntity):
+    """Representation of a Stiga refresh button."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: StigaBLECoordinator,
+        name: str,
+        icon: str,
+    ) -> None:
+        """Initialize the button."""
+        self.coordinator = coordinator
+        self._attr_name = name
+        self._attr_icon = icon
+        
+        mac_clean = coordinator.mac.replace(":", "").lower()
+        self._attr_unique_id = f"stiga_cmd_{name.replace(' ', '_').lower()}_{mac_clean}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, mac_clean)},
+            name=f"Stiga Mower {coordinator.mac}",
+            manufacturer="Stiga",
+        )
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        LOGGER.debug("Pressing %s button", self._attr_name)
+        await self.coordinator.async_request_refresh()
