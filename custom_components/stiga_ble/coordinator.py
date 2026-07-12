@@ -20,6 +20,50 @@ from .const import (
 POLL_INTERVAL = timedelta(minutes=5)
 WAIT_FOR_NOTIFICATIONS_SEC = 5.0
 
+def parse_varint(data: bytearray, offset: int) -> tuple[int, int]:
+    result = 0
+    shift = 0
+    while offset < len(data):
+        byte = data[offset]
+        offset += 1
+        result |= (byte & 0x7f) << shift
+        if not (byte & 0x80):
+            break
+        shift += 7
+    return result, offset
+
+def extract_protobuf_fields(data: bytearray) -> dict[int, any]:
+    fields = {}
+    offset = 0
+    while offset < len(data):
+        if offset >= len(data):
+            break
+        key, offset = parse_varint(data, offset)
+        field_num = key >> 3
+        wire_type = key & 0x07
+        
+        if wire_type == 0: # Varint
+            val, offset = parse_varint(data, offset)
+            fields[field_num] = val
+        elif wire_type == 1: # 64-bit
+            if offset + 8 <= len(data):
+                offset += 8
+            else:
+                break
+        elif wire_type == 2: # Length-delimited
+            length, offset = parse_varint(data, offset)
+            offset += length
+        elif wire_type == 5: # 32-bit float
+            if offset + 4 <= len(data):
+                val = struct.unpack('<f', data[offset:offset+4])[0]
+                fields[field_num] = val
+                offset += 4
+            else:
+                break
+        else:
+            # Unknown wire type, can't reliably continue parsing
+            break
+    return fields
 class StigaBLECoordinator(DataUpdateCoordinator):
     """Class to manage BLE connection and data for Stiga mower."""
 
@@ -119,50 +163,6 @@ class StigaBLECoordinator(DataUpdateCoordinator):
 
         return self.data
 
-def parse_varint(data: bytearray, offset: int) -> tuple[int, int]:
-    result = 0
-    shift = 0
-    while offset < len(data):
-        byte = data[offset]
-        offset += 1
-        result |= (byte & 0x7f) << shift
-        if not (byte & 0x80):
-            break
-        shift += 7
-    return result, offset
-
-def extract_protobuf_fields(data: bytearray) -> dict[int, any]:
-    fields = {}
-    offset = 0
-    while offset < len(data):
-        if offset >= len(data):
-            break
-        key, offset = parse_varint(data, offset)
-        field_num = key >> 3
-        wire_type = key & 0x07
-        
-        if wire_type == 0: # Varint
-            val, offset = parse_varint(data, offset)
-            fields[field_num] = val
-        elif wire_type == 1: # 64-bit
-            if offset + 8 <= len(data):
-                offset += 8
-            else:
-                break
-        elif wire_type == 2: # Length-delimited
-            length, offset = parse_varint(data, offset)
-            offset += length
-        elif wire_type == 5: # 32-bit float
-            if offset + 4 <= len(data):
-                val = struct.unpack('<f', data[offset:offset+4])[0]
-                fields[field_num] = val
-                offset += 4
-            else:
-                break
-        else:
-            # Unknown wire type, can't reliably continue parsing
-            break
-    return fields
 
     def _notification_handler(self, sender, data: bytearray) -> None:
         """Handle incoming BLE notifications."""
