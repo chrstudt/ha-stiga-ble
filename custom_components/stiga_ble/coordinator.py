@@ -208,10 +208,16 @@ def extract_protobuf_fields(data: bytearray) -> dict[int, any]:
             if 9 in fields:
                 self.data["remaining_time"] = round(fields[9], 1)
 
+        # Legacy basic broadcast packet check
+        if len(data) >= 3 and data[0] == 0x02:
+            self.data["battery"] = data[1]
+            legacy_states = {0: "Idle", 1: "Mowing", 2: "Charging", 3: "Paused", 4: "Error"}
+            self.data["status"] = legacy_states.get(data[2], f"Unknown ({data[2]})")
+
         LOGGER.info("Stiga received notification: %s -> Parsed status: %s", data.hex(' ').upper(), self.data.get('status'))
 
-        # Check if we have received at least basic status or battery info
-        if self.data.get("status") is not None or self.data.get("battery") is not None:
+        # Check if we have received at least basic status and battery info
+        if self.data.get("status") is not None and self.data.get("battery") is not None:
             self._data_received.set()
 
         # Push the updated data instantly to the Home Assistant sensors
