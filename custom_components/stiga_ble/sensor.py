@@ -27,9 +27,11 @@ async def async_setup_entry(
     async_add_entities([
         StigaBatterySensor(coordinator),
         StigaStatusSensor(coordinator),
-        StigaSpeedSensor(coordinator),
-        StigaModeSensor(coordinator),
-        StigaErrorSensor(coordinator),
+        StigaTriggerSensor(coordinator),
+        StigaBatteryCapacitySensor(coordinator),
+        StigaBatteryVoltageSensor(coordinator),
+        StigaBatteryCyclesSensor(coordinator),
+        StigaRemainingTimeSensor(coordinator),
         StigaRawSensor(coordinator),
     ])
 
@@ -80,49 +82,86 @@ class StigaStatusSensor(StigaMowerSensor):
     def native_value(self) -> str | None:
         return self.coordinator.data.get("status")
 
-class StigaSpeedSensor(StigaMowerSensor):
-    """Representation of the Stiga speed sensor."""
-    _attr_icon = "mdi:speedometer"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "RPM"
+class StigaTriggerSensor(StigaMowerSensor):
+    """Representation of the Stiga trigger sensor."""
+    _attr_icon = "mdi:robot"
 
     def __init__(self, coordinator: StigaBLECoordinator) -> None:
         super().__init__(coordinator)
         mac_clean = self._mac.replace(":", "").lower()
-        self._attr_unique_id = f"stiga_speed_{mac_clean}"
-        self._attr_name = "Speed"
+        self._attr_unique_id = f"stiga_trigger_{mac_clean}"
+        self._attr_name = "Trigger Mode"
+
+    @property
+    def native_value(self) -> str | None:
+        val = self.coordinator.data.get("automatic_trigger")
+        if val is None:
+            return None
+        return "Automatic" if val else "Manual"
+
+class StigaBatteryCapacitySensor(StigaMowerSensor):
+    """Representation of the Stiga battery capacity sensor."""
+    _attr_icon = "mdi:battery-high"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "mAh"
+
+    def __init__(self, coordinator: StigaBLECoordinator) -> None:
+        super().__init__(coordinator)
+        mac_clean = self._mac.replace(":", "").lower()
+        self._attr_unique_id = f"stiga_battery_capacity_{mac_clean}"
+        self._attr_name = "Battery Capacity"
 
     @property
     def native_value(self) -> int | None:
-        return self.coordinator.data.get("speed")
+        return self.coordinator.data.get("battery_capacity")
 
-class StigaModeSensor(StigaMowerSensor):
-    """Representation of the Stiga mode sensor."""
-    _attr_icon = "mdi:leaf"
-
-    def __init__(self, coordinator: StigaBLECoordinator) -> None:
-        super().__init__(coordinator)
-        mac_clean = self._mac.replace(":", "").lower()
-        self._attr_unique_id = f"stiga_mode_{mac_clean}"
-        self._attr_name = "Mode"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.data.get("mode")
-
-class StigaErrorSensor(StigaMowerSensor):
-    """Representation of the Stiga error sensor."""
-    _attr_icon = "mdi:alert-circle"
+class StigaBatteryVoltageSensor(StigaMowerSensor):
+    """Representation of the Stiga battery voltage sensor."""
+    _attr_device_class = SensorDeviceClass.VOLTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "V"
 
     def __init__(self, coordinator: StigaBLECoordinator) -> None:
         super().__init__(coordinator)
         mac_clean = self._mac.replace(":", "").lower()
-        self._attr_unique_id = f"stiga_error_{mac_clean}"
-        self._attr_name = "Error Status"
+        self._attr_unique_id = f"stiga_battery_voltage_{mac_clean}"
+        self._attr_name = "Battery Voltage"
 
     @property
-    def native_value(self) -> str | None:
-        return self.coordinator.data.get("error")
+    def native_value(self) -> float | None:
+        return self.coordinator.data.get("battery_voltage")
+
+class StigaBatteryCyclesSensor(StigaMowerSensor):
+    """Representation of the Stiga battery cycles sensor."""
+    _attr_icon = "mdi:battery-sync"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "cycles"
+
+    def __init__(self, coordinator: StigaBLECoordinator) -> None:
+        super().__init__(coordinator)
+        mac_clean = self._mac.replace(":", "").lower()
+        self._attr_unique_id = f"stiga_battery_cycles_{mac_clean}"
+        self._attr_name = "Battery Cycles"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("battery_cycles")
+
+class StigaRemainingTimeSensor(StigaMowerSensor):
+    """Representation of the Stiga remaining time sensor."""
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "s"
+
+    def __init__(self, coordinator: StigaBLECoordinator) -> None:
+        super().__init__(coordinator)
+        mac_clean = self._mac.replace(":", "").lower()
+        self._attr_unique_id = f"stiga_remaining_time_{mac_clean}"
+        self._attr_name = "Remaining Time"
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.data.get("remaining_time")
 
 class StigaRawSensor(StigaMowerSensor):
     """Representation of the Stiga raw debug sensor."""

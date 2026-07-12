@@ -1,5 +1,6 @@
 """Coordinator for Stiga BLE integration."""
 import asyncio
+import struct
 from datetime import timedelta
 from bleak import BleakClient
 from bleak.exc import BleakError
@@ -38,9 +39,11 @@ class StigaBLECoordinator(DataUpdateCoordinator):
         self.data = {
             "battery": None,
             "status": None,
-            "speed": None,
-            "mode": None,
-            "error": None,
+            "battery_capacity": None,
+            "battery_voltage": None,
+            "battery_cycles": None,
+            "remaining_time": None,
+            "automatic_trigger": None,
             "raw_rx": None,
         }
 
@@ -107,37 +110,94 @@ class StigaBLECoordinator(DataUpdateCoordinator):
 
         return self.data
 
+def parse_varint(data: bytearray, offset: int) -> tuple[int, int]:
+    result = 0
+    shift = 0
+    while offset < len(data):
+        byte = data[offset]
+        offset += 1
+        result |= (byte & 0x7f) << shift
+        if not (byte & 0x80):
+            break
+        shift += 7
+    return result, offset
+
+def extract_protobuf_fields(data: bytearray) -> dict[int, any]:
+    fields = {}
+    offset = 0
+    while offset < len(data):
+        if offset >= len(data):
+            break
+        key, offset = parse_varint(data, offset)
+        field_num = key >> 3
+        wire_type = key & 0x07
+        
+        if wire_type == 0: # Varint
+            val, offset = parse_varint(data, offset)
+            fields[field_num] = val
+        elif wire_type == 1: # 64-bit
+            if offset + 8 <= len(data):
+                offset += 8
+            else:
+                break
+        elif wire_type == 2: # Length-delimited
+            length, offset = parse_varint(data, offset)
+            offset += length
+        elif wire_type == 5: # 32-bit float
+            if offset + 4 <= len(data):
+                val = struct.unpack('<f', data[offset:offset+4])[0]
+                fields[field_num] = val
+                offset += 4
+            else:
+                break
+        else:
+            # Unknown wire type, can't reliably continue parsing
+            break
+    return fields
+
     def _notification_handler(self, sender, data: bytearray) -> None:
         """Handle incoming BLE notifications."""
         self.data["raw_rx"] = data.hex(" ").upper()
 
-        if len(data) >= 3 and data[0] == 0x02:
-            self.data["battery"] = data[1]
-            states = {0: "Idle", 1: "Mowing", 2: "Charging", 3: "Paused", 4: "Error"}
-            self.data["status"] = states.get(data[2], f"Unknown ({data[2]})")
-        elif len(data) >= 6 and data[0] == 0x08 and data[1] == 0x01 and data[2] == 0x18 and data[4] == 0x28 and data[5] == 0x01:
-            state_val = data[3]
-            states = {
-                0x01: "Mowing",
-                0x03: "Charging",
-                0x04: "Returning",
-                0x06: "Blocked",
-                0x08: "Lid Open",
-                0x21: "Stopped"
-            }
-            self.data["status"] = states.get(state_val, f"Unknown (0x{state_val:02X})")
-        elif len(data) >= 5 and data[0] == 0x08 and data[1] == 0x88 and data[2] == 0x27 and data[3] == 0x10:
-            self.data["battery"] = data[4]
-        elif len(data) >= 4 and data[0] == 0x03:
-            self.data["speed"] = (data[1] << 8) | data[2]
-            modes = {0: "Standard", 1: "Eco", 2: "Turbo"}
-            self.data["mode"] = modes.get(data[3], f"Unknown ({data[3]})")
-        elif len(data) >= 2 and data[0] == 0x04:
-            errors = {0: "None", 1: "Blade Blocked"}
-            if data[1] == 0:
-                self.data["error"] = "None"
+        uuid = getattr(sender, "uuid", "").lower()
+        handle = getattr(sender, "handle", 0)
+
+        try:
+            fields = extract_protobuf_fields(data)
+        except Exception as e:
+            LOGGER.debug("Could not parse protobuf: %s", e)
+            fields = {}
+
+        if "ed2abe7b" in uuid or handle == 48 or (3 in fields and 1 in fields and fields.get(1) == 1):
+            if 3 in fields:
+                state_val = fields[3]
+                states = {
+                    1: "Mowing",
+                    3: "Charging",
+                    4: "Idle / Full",
+                    6: "Error: Blocked",
+                    8: "Error: Flap open",
+                    13: "Returning",
+                    33: "Waiting"
+                }
+                self.data["status"] = states.get(state_val, f"Unknown ({state_val})")
+            
+            if 2 in fields:
+                self.data["automatic_trigger"] = bool(fields[2])
             else:
-                self.data["error"] = errors.get(data[1], f"Unknown Error ({data[1]})")
+                self.data["automatic_trigger"] = False
+        
+        elif "00002a19" in uuid or handle == 43 or (1 in fields and 2 in fields and fields.get(1, 0) > 100):
+            if 1 in fields:
+                self.data["battery_capacity"] = fields[1]
+            if 2 in fields:
+                self.data["battery"] = fields[2]
+            if 7 in fields:
+                self.data["battery_voltage"] = round(fields[7], 2)
+            if 8 in fields:
+                self.data["battery_cycles"] = fields[8]
+            if 9 in fields:
+                self.data["remaining_time"] = round(fields[9], 1)
 
         LOGGER.info("Stiga received notification: %s -> Parsed status: %s", data.hex(' ').upper(), self.data.get('status'))
 
