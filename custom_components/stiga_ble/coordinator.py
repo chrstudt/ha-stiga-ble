@@ -46,6 +46,7 @@ class StigaBLECoordinator(DataUpdateCoordinator):
             "automatic_trigger": None,
             "raw_rx": None,
         }
+        self._data_received = asyncio.Event()
 
     def _get_ble_device(self):
         """Get the best BLE device, explicitly avoiding Shelly proxies if possible."""
@@ -98,7 +99,15 @@ class StigaBLECoordinator(DataUpdateCoordinator):
                                     LOGGER.debug("Could not subscribe to %s: %s", char.uuid, e)
                     
                     LOGGER.info("Connected to %s, waiting for notifications...", self.mac)
-                    await asyncio.sleep(WAIT_FOR_NOTIFICATIONS_SEC)
+                    self._data_received.clear()
+                    try:
+                        await asyncio.wait_for(
+                            self._data_received.wait(), 
+                            timeout=WAIT_FOR_NOTIFICATIONS_SEC
+                        )
+                    except (asyncio.TimeoutError, TimeoutError):
+                        LOGGER.debug("Timeout reached while waiting for data notifications")
+                    
                     LOGGER.info("Finished collecting data from %s, disconnecting.", self.mac)
                 finally:
                     await client.disconnect()
@@ -200,6 +209,10 @@ def extract_protobuf_fields(data: bytearray) -> dict[int, any]:
                 self.data["remaining_time"] = round(fields[9], 1)
 
         LOGGER.info("Stiga received notification: %s -> Parsed status: %s", data.hex(' ').upper(), self.data.get('status'))
+
+        # Check if we have received at least basic status or battery info
+        if self.data.get("status") is not None or self.data.get("battery") is not None:
+            self._data_received.set()
 
         # Push the updated data instantly to the Home Assistant sensors
         self.async_set_updated_data(self.data)
